@@ -1,0 +1,8 @@
+'use client';
+import { FormEvent, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { api, getError } from '@/lib/api';
+export default function RegisterPage(){const router=useRouter();const [name,setName]=useState('');const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [loading,setLoading]=useState(false);
+async function submit(e:FormEvent){e.preventDefault();setError('');setLoading(true);try{const res=await api.post('/api/auth/register',{name,email,password});localStorage.setItem('token',res.data.token);router.push('/dashboard');}catch(err){setError(getError(err));}finally{setLoading(false);}}
+return <main className="shell"><form className="card auth" onSubmit={submit}><div className="brand">Signora</div><h1>Create account</h1><p className="muted">Register to upload and manage PDF documents.</p>{error&&<p className="error">{error}</p>}<div className="field"><label>Full name</label><input required value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></div><div className="field"><label>Email</label><input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></div><div className="field"><label>Password</label><input required minLength={8} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters"/></div><button className="btn" disabled={loading} style={{width:'100%'}}>{loading?'Creating account...':'Register'}</button><p className="muted">Already have an account? <Link href="/login">Login</Link></p></form></main>}

@@ -75,8 +75,30 @@ export default function PreparePage({ params }: { params: Promise<{ id: string }
         ]);
 
         setPdfData(pdfRes.data);
-        setSigners(signersRes.data.signers || []);
-        setBoxes(boxesRes.data.boxes || []);
+        const loadedSigners: Signer[] = signersRes.data.signers || [];
+        const loadedBoxes: Box[] = boxesRes.data.boxes || [];
+        // Complete the existing "Add New Signer" round trip. Only assign a
+        // known signer from this document to an existing box.
+        const query = new URLSearchParams(window.location.search);
+        const requestedBox = query.get('assignBox');
+        const requestedSigner = query.get('signerId');
+        const boxIndex = requestedBox !== null && /^\d+$/.test(requestedBox)
+          ? Number(requestedBox)
+          : -1;
+        const canAssign = Number.isSafeInteger(boxIndex) && boxIndex >= 0 &&
+          boxIndex < loadedBoxes.length &&
+          loadedSigners.some((signer) => signer.id === requestedSigner);
+        setSigners(loadedSigners);
+        setBoxes(canAssign
+          ? loadedBoxes.map((box, index) => index === boxIndex
+            ? { ...box, signerId: requestedSigner }
+            : box)
+          : loadedBoxes);
+        if (canAssign) {
+          setSelectedBoxIndex(boxIndex);
+          setCurrentPage(loadedBoxes[boxIndex].page);
+          setMessage({ text: 'Signer assigned. Save boxes to keep this assignment.', type: 'success' });
+        }
 
         const currentDoc = (docsRes.data.documents || []).find((d: any) => d.id === docId);
         if (currentDoc) setDocTitle(currentDoc.title);

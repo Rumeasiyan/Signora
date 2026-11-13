@@ -1,0 +1,16 @@
+# Node / Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/*.tsbuildinfo
+backend/node_modules/
+backend/signed/
+
+# Go / Backend
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/.env
+
+# OS
+.DS_Store
+Thumbs.db

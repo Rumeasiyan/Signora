@@ -83,7 +83,10 @@ func (h DocumentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, 500, "Could not save document details")
 		return
 	}
-
+	_, _ = h.DB.Exec(r.Context(), `
+		INSERT INTO audit_logs (document_id, action, performed_by, details)
+		VALUES ($1, 'DOCUMENT_UPLOADED', 'Sender', $2)
+	`, docID, fmt.Sprintf("Document uploaded: %s (%s)", title, filepath.Base(header.Filename)))
 	utils.JSON(w, 201, map[string]any{"message": "PDF uploaded successfully", "document": map[string]any{"id": docID, "title": title, "originalName": filepath.Base(header.Filename), "fileSize": size, "status": "draft"}})
 }
 func (h DocumentHandler) List(w http.ResponseWriter, r *http.Request) {

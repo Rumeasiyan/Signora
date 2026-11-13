@@ -2,6 +2,9 @@
   "name": "signora-backend-stamper",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "test": "node --test scripts/stamp_pdf.test.js"
+  },
   "dependencies": {
     "pdf-lib": "^1.17.1"
   }

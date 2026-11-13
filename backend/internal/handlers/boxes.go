@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-
+	"fmt"
 	"math"
 	"net/http"
 	"strings"
@@ -154,6 +154,14 @@ func (h BoxesHandler) Save(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Add audit log
+	if _, err := tx.Exec(r.Context(), `
+		INSERT INTO audit_logs (document_id, action, performed_by, details)
+		VALUES ($1, 'BOXES_SAVED', 'Sender', $2)
+	`, docID, fmt.Sprintf("Placed and saved %d signature box(es)", len(req.Boxes))); err != nil {
+		utils.Error(w, 500, "Could not record signature box changes")
+		return
+	}
 
 	if err := tx.Commit(r.Context()); err != nil {
 		utils.Error(w, 500, "Could not commit transaction")

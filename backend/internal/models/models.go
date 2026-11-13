@@ -31,7 +31,8 @@ type Signer struct {
 	Status         string     `json:"status"` // "pending" | "signed"
 	SignedAt       *time.Time `json:"signedAt,omitempty"`
 	SignatureData  *string    `json:"signatureData,omitempty"`
- main
+	EmailSent      bool       `json:"emailSent"`
+	EmailSentAt    *time.Time `json:"emailSentAt,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 }
 
@@ -50,12 +51,21 @@ type SignatureBox struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
- main
+type AuditLog struct {
+	ID          string    `json:"id"`
+	DocumentID  string    `json:"documentId"`
+	Action      string    `json:"action"`
+	PerformedBy string    `json:"performedBy"`
+	Details     string    `json:"details"`
+	IPAddress   string    `json:"ipAddress,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 type DocumentStatusSummary struct {
 	Document     Document       `json:"document"`
 	Signers      []Signer       `json:"signers"`
 	Boxes        []SignatureBox `json:"boxes"`
-main
+	AuditLogs    []AuditLog     `json:"auditLogs"`
 	TotalSigners int            `json:"totalSigners"`
 	SignedCount  int            `json:"signedCount"`
 	Progress     int            `json:"progress"` // 0-100%

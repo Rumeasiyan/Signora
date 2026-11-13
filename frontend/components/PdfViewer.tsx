@@ -1,6 +1,25 @@
 'use client';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+
+// Modern PDF.js uses these decoders for scanned PDFs. Resolve only known,
+// package-owned assets so PDF content cannot select an arbitrary fetch URL.
+class PdfBinaryDataFactory {
+  async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
+    let url: URL;
+    if (kind === 'wasmUrl' && filename === 'openjpeg.wasm') {
+      url = new URL('pdfjs-dist/wasm/openjpeg.wasm', import.meta.url);
+    } else if (kind === 'wasmUrl' && filename === 'jbig2.wasm') {
+      url = new URL('pdfjs-dist/wasm/jbig2.wasm', import.meta.url);
+    } else {
+      throw new Error('Unsupported PDF resource');
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Could not load PDF image decoder');
+    return new Uint8Array(await response.arrayBuffer());
+  }
+}
 
 interface PdfViewerProps {
   pdfUrl?: string;
@@ -24,59 +43,47 @@ export default function PdfViewer({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.2);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 600, height: 800 });
 
-  // Load PDF.js script dynamically
-  const getPdfJs = useCallback(async () => {
-    if (typeof window === 'undefined') return null;
-    if ((window as any).pdfjsLib) {
-      return (window as any).pdfjsLib;
-    }
-
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      script.async = true;
-      script.onload = () => {
-        const lib = (window as any).pdfjsLib;
-        if (lib) {
-          lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-          resolve(lib);
-        } else {
-          reject(new Error('PDF.js library failed to load'));
-        }
-      };
-      script.onerror = () => reject(new Error('Network error loading PDF.js'));
-      document.head.appendChild(script);
-    });
-  }, []);
-
   // Load Document
   useEffect(() => {
     let isCancelled = false;
+    let loadingTask: PDFDocumentLoadingTask | undefined;
     async function loadDocument() {
       setLoading(true);
       setError(null);
+      setPdfDoc(null);
       try {
-        const pdfjs = await getPdfJs();
-        if (!pdfjs) return;
-
-             let loadingTask;
+        // Import only in the browser. Bundle the worker from the same pinned package
+        // as the API, rather than executing a third-party CDN script.
+        const pdfjs = await import('pdfjs-dist');
+        if (isCancelled) return;
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url,
+        ).toString();
+        const options = {
+          // Canvas rendering only: never enable XFA or execute PDF actions.
+          enableXfa: false,
+          useWorkerFetch: false,
+          BinaryDataFactory: PdfBinaryDataFactory,
+        };
 
         if (pdfData) {
           const originalBytes = new Uint8Array(pdfData);
           const copiedBytes = Uint8Array.from(originalBytes);
 
           loadingTask = pdfjs.getDocument({
+            ...options,
             data: copiedBytes,
           });
         } else if (pdfUrl) {
-          loadingTask = pdfjs.getDocument(pdfUrl);
+          loadingTask = pdfjs.getDocument({ ...options, url: pdfUrl });
         } else {
           return;
         }
@@ -99,12 +106,14 @@ export default function PdfViewer({
     loadDocument();
     return () => {
       isCancelled = true;
+      // Releases the document and worker, including an in-flight download.
+      void loadingTask?.destroy();
     };
-  }, [pdfUrl, pdfData, getPdfJs, onTotalPagesLoaded]);
+  }, [pdfUrl, pdfData, onTotalPagesLoaded]);
 
   // Render current page onto canvas
   useEffect(() => {
-    let renderTask: any = null;
+    let renderTask: RenderTask | null = null;
     let isCancelled = false;
 
     async function renderPage() {
@@ -129,6 +138,7 @@ export default function PdfViewer({
         }
 
         const renderContext = {
+          canvas,
           canvasContext: context,
           viewport: viewport,
         };

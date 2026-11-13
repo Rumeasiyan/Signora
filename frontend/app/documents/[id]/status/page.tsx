@@ -9,7 +9,10 @@ import {
   Copy,
   Check,
   ExternalLink,
-main
+  ShieldCheck,
+  RefreshCw,
+  Users,
+  Calendar,
 } from 'lucide-react';
 import Nav from '@/components/Nav';
 import WorkflowStepper from '@/components/WorkflowStepper';
@@ -27,7 +30,15 @@ interface Signer {
   createdAt: string;
 }
 
-main
+interface AuditLog {
+  id: string;
+  action: string;
+  performedBy: string;
+  details: string;
+  ipAddress?: string;
+  createdAt: string;
+}
+
 interface StatusSummary {
   document: {
     id: string;
@@ -39,7 +50,7 @@ interface StatusSummary {
     signedFileName?: string;
   };
   signers: Signer[];
- main
+  auditLogs: AuditLog[];
   totalSigners: number;
   signedCount: number;
   progress: number;
@@ -182,7 +193,7 @@ export default function DocumentStatusPage({ params }: { params: Promise<{ id: s
       <main className="shell">
         <div className="row" style={{ marginBottom: 14 }}>
           <div>
-main
+            <h1 className="title">Document Status & Activity</h1>
             <p className="muted" style={{ margin: 0 }}>
               {summary ? `Title: ${summary.document.title}` : 'Real-time document signing progress.'}
             </p>
@@ -215,7 +226,7 @@ main
                   borderRadius: 8,
                 }}
               >
- main
+                <Clock size={15} /> Signed PDF unlocks when all signers complete
               </div>
             )}
           </div>
@@ -360,7 +371,55 @@ main
                 </div>
               </div>
 
-main
+              {/* Audit Trail Timeline */}
+              <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                  <ShieldCheck size={20} color="#4f46e5" />
+                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                    Audit Trail & History
+                  </h2>
+                </div>
+
+                {summary.auditLogs.length === 0 ? (
+                  <p className="muted">No activity logged yet.</p>
+                ) : (
+                  <div className="timeline">
+                    {summary.auditLogs.map((log) => {
+                      const isCompleted = log.action === 'DOCUMENT_COMPLETED';
+                      const isSigned = log.action === 'DOCUMENT_SIGNED';
+
+                      return (
+                        <div key={log.id} className="timeline-item">
+                          <div
+                            className={`timeline-dot ${isCompleted || isSigned ? 'done' : ''}`}
+                          />
+                          <div className="timeline-content">
+                            <div className="row" style={{ marginBottom: 3 }}>
+                              <strong style={{ color: '#1e293b' }}>
+                                {log.action.replace(/_/g, ' ')}
+                              </strong>
+                              <span className="muted" style={{ fontSize: 11 }}>
+                                {new Date(log.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                })}{' '}
+                                · {new Date(log.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#334155' }}>
+                              {log.details}
+                            </div>
+                            <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                              By: {log.performedBy} {log.ipAddress ? `(${log.ipAddress})` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         ) : null}

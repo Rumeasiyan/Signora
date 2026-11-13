@@ -69,4 +69,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_document_created ON audit_logs(document_id, created_at ASC);
-main
+
+-- Email tracking + one-time completion email (safe to run on an existing database)
+-- Elaveny's original documents table predates signed PDF storage.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS signed_file_name TEXT;
+ALTER TABLE signers   ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE signers   ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS completion_emailed_at TIMESTAMPTZ;

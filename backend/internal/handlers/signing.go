@@ -1,19 +1,27 @@
 package handlers
 
 import (
-main
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
 
- main
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"phase1-signora/backend/internal/models"
+	"phase1-signora/backend/internal/services"
+	"phase1-signora/backend/internal/utils"
 )
 
 type SigningHandler struct {
 	DB        *pgxpool.Pool
 	UploadDir string
- main
+	SignedDir string
+	Mailer    *services.Mailer
 }
 
 type SubmitSignatureRequest struct {
@@ -118,7 +126,26 @@ func (h SigningHandler) GetSigningInfo(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, 500, "Could not read signature boxes")
 		return
 	}
-main
+	// Audit: record the first time this signer opens the link (not every refresh)
+	performedBy := fmt.Sprintf("%s (%s)", signer.Name, signer.Email)
+	var alreadyLogged bool
+	if err := h.DB.QueryRow(r.Context(), `
+		SELECT EXISTS(SELECT 1 FROM audit_logs WHERE document_id=$1 AND action='DOCUMENT_VIEWED' AND performed_by=$2)
+	`, signer.DocumentID, performedBy).Scan(&alreadyLogged); err != nil {
+		utils.Error(w, 500, "Could not check document audit trail")
+		return
+	}
+	if !alreadyLogged {
+		_, err := h.DB.Exec(r.Context(), `
+			INSERT INTO audit_logs (document_id, action, performed_by, details, ip_address)
+			VALUES ($1, 'DOCUMENT_VIEWED', $2, 'Signer opened the document for review', $3)
+		`, signer.DocumentID, performedBy, utils.ClientIP(r))
+		if err != nil {
+			utils.Error(w, 500, "Could not record document view")
+			return
+		}
+	}
+
 	utils.JSON(w, 200, map[string]any{
 		"signer": map[string]any{
 			"id":     signer.ID,
@@ -180,7 +207,7 @@ func (h SigningHandler) SubmitSignature(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
- main
+	var signerID, docID, signerName, signerEmail, currentStatus string
 	var expiresAt time.Time
 	tx, err := h.DB.Begin(r.Context())
 	if err != nil {
@@ -191,12 +218,12 @@ func (h SigningHandler) SubmitSignature(w http.ResponseWriter, r *http.Request) 
 
 	var documentStatus string
 	err = tx.QueryRow(r.Context(), `
-main
+		SELECT s.id, s.document_id, s.name, s.email, s.status, s.token_expires_at, d.status
 		FROM signers s
 		JOIN documents d ON d.id = s.document_id
 		WHERE s.token = $1
 		FOR UPDATE OF s
-main
+	`, token).Scan(&signerID, &docID, &signerName, &signerEmail, &currentStatus, &expiresAt, &documentStatus)
 	if err == pgx.ErrNoRows {
 		utils.JSON(w, 404, map[string]string{"error": "Invalid signing link", "state": "invalid"})
 		return
@@ -267,7 +294,15 @@ main
 		return
 	}
 
-main
+	// Audit log (includes the signer's IP address)
+	_, err = tx.Exec(r.Context(), `
+		INSERT INTO audit_logs (document_id, action, performed_by, details, ip_address)
+		VALUES ($1, 'DOCUMENT_SIGNED', $2, 'Signer submitted electronic signature', $3)
+	`, docID, fmt.Sprintf("%s (%s)", signerName, signerEmail), utils.ClientIP(r))
+	if err != nil {
+		utils.Error(w, 500, "Could not record signature audit event")
+		return
+	}
 	if err := tx.Commit(r.Context()); err != nil {
 		utils.Error(w, 500, "Could not commit signature")
 		return
@@ -285,7 +320,14 @@ main
 	}
 
 	allCompleted := pendingCount == 0
-main
+	if allCompleted {
+		// Do not report completion until the signed PDF and its certificate are written.
+		if err := services.CompleteDocument(context.Background(), h.DB, h.Mailer, h.UploadDir, h.SignedDir, docID); err != nil {
+			log.Printf("complete document %s: %v", docID, err)
+			utils.Error(w, 500, "Signature was recorded, but PDF finalization failed. Please contact the sender to regenerate the signed PDF.")
+			return
+		}
+	}
 
 	utils.JSON(w, 200, map[string]any{
 		"message":      "Signature recorded successfully!",
