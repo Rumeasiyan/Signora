@@ -1,0 +1,27 @@
+# Allow only the files the backend image needs. Never send the full monorepo.
+**
+!Dockerfile
+!.dockerignore
+!go.mod
+!go.sum
+!package.json
+!package-lock.json
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!scripts/
+!scripts/stamp_pdf.js
+!deploy/
+!deploy/validate-env.mjs
+!schema.sql
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pdf
+**/uploads/**
+**/signed/**
+**/node_modules/**
+**/.git/**

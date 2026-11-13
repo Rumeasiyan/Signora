@@ -1,0 +1,27 @@
+# Preview configuration only: Render Free cannot persist local PDF files.
+services:
+  - type: web
+    name: signora-api-preview
+    runtime: docker
+    plan: free
+    repo: https://github.com/Divaranan/Signora
+    branch: fix/signora-full-integration
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: UPLOAD_DIR
+        value: /var/lib/signora/uploads
+      - key: SIGNED_DIR
+        value: /var/lib/signora/signed
+      - key: ALLOW_EPHEMERAL_PDF_STORAGE
+        value: "true"
+# PORT is supplied by Render. SMTP is deliberately unconfigured on Free.
+# Creating a service from this Blueprint would deploy it; do so only after approval.
